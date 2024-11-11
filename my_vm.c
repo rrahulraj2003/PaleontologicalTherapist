@@ -39,9 +39,7 @@ void set_physical_mem() {
  * Note: Make sure this is thread safe by locking around critical 
  *       data structures touched when interacting with the TLB
  */
-int
-TLB_add(void *va, void *pa)
-{
+int TLB_add(void *va, void *pa) {
 
     /*Part 2 HINT: Add a virtual to physical page translation to the TLB */
 
@@ -57,8 +55,7 @@ TLB_add(void *va, void *pa)
  * Note: Make sure this is thread safe by locking around critical 
  *       data structures touched when interacting with the TLB
  */
-pte_t *
-TLB_check(void *va) {
+pte_t * TLB_check(void *va) {
 
     /* Part 2: TLB lookup code here */
 
@@ -74,9 +71,7 @@ TLB_check(void *va) {
  * Part 2: Print TLB miss rate.
  * Feel free to extend the function arguments or return type.
  */
-void
-print_TLB_missrate()
-{
+void print_TLB_missrate() {
     double miss_rate = 0;	
 
     /*Part 2 Code here to calculate and print the TLB miss rate*/
@@ -114,9 +109,7 @@ as an argument, and sets a page table entry. This function will walk the page
 directory to see if there is an existing mapping for a virtual address. If the
 virtual address is not present, then a new entry will be added
 */
-int
-map_page(pde_t *pgdir, void *va, void *pa)
-{
+int map_page(pde_t *pgdir, void *va, void *pa) {
 
     /*HINT: Similar to translate(), find the page directory (1st level)
     and page table (2nd-level) indices. If no mapping exists, set the

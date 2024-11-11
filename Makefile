@@ -8,9 +8,9 @@ all: my_vm.a
 my_vm.a: my_vm.o
 	$(AR) libmy_vm.a my_vm.o
 	$(RANLIB) libmy_vm.a
+	chmod +x my_vm.o
 
 my_vm.o: my_vm.h
-
 	$(CC)	$(CFLAGS)  my_vm.c
 
 clean:
