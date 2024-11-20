@@ -1,8 +1,28 @@
 #include "my_vm.h"
 #include <stdio.h>
 
-//OUTER PAGE TABLEEE
+void set_bit(char *bitmap, int index) {
+    unsigned int manip = bitmap[index / 8]; //useless line cause empty but keep it anyway
+    unsigned int bit = 1 << index % 8;
+    manip = manip | bit;
+    bitmap[index / 8] = manip;
+}
 
+
+int get_bit(char *bitmap, int index) {
+    unsigned int manip = bitmap[index / 8];
+    manip = manip >> (index % 8);
+    return manip % 2;
+}
+
+unsigned int get_top_bits(unsigned int value,  int num_bits, int bitmap_size)
+{
+    unsigned int cross = ((int) (2 << num_bits) - 1) << (8 * bitmap_size - num_bits);
+    
+    unsigned int gimme = value & cross; //Removing all but the top bits
+
+    return gimme >> 8 * bitmap_size - num_bits; //moving bits to get top bit
+}
 
 /*
 Function responsible for allocating and setting your physical memory 
@@ -122,8 +142,43 @@ int map_page(pde_t *pgdir, void *va, void *pa) {
 /*Function that gets the next available page
 */
 void *get_next_avail(int num_pages) {
- 
+
+    int curr_cont = 0;
+    int curr_index_cont = -1; //holds the virtual page entry address
+
     //Use virtual address bitmap to find the next free page
+    for(int i = 0; i < NUM_VIRT_PAGES/8; i++){
+        if(v_bitmap[i] != 255){ //if there exists a 0 in this bitmap index
+
+            for(int j = 0; j < 8; j++){ //get each bit and count if num_pages fit here
+                if(get_bit(&v_bitmap, (i*8) + j) == 0){ //if free spot found
+                    if(curr_index_cont == -1){ //if start of contiguous, assign index variable to address of the start
+                        //assign curr_index_cont to the virtual page entry address
+                        curr_cont++;
+                    }else if(curr_index_cont != -1){ //if contiguous, curr_cont++
+                        curr_cont++;
+                    }
+
+                    //If successfully found contiguous entries, return start of contiguous
+                    if(num_pages == curr_cont){
+                        return curr_index_cont;
+                    }
+                    
+                }else{ //if occupied spot found, if index == 1 basically
+                    if(curr_index_cont == -1){ //if not contiguous and still nothing found
+                        //do nothing
+                    }else if(curr_index_cont != -1){ //if contiguous but hits an occupied spot, RESET
+                        curr_index_cont = -1;
+                        curr_cont = 0;
+                    }
+                }
+            }
+
+            curr_cont = 0;
+            curr_index_cont = -1;
+
+        }
+    }
 
     return NULL;
 }
