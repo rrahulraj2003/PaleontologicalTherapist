@@ -1,4 +1,8 @@
 #include "my_vm.h"
+#include <stdio.h>
+
+//OUTER PAGE TABLEEE
+
 
 /*
 Function responsible for allocating and setting your physical memory 
@@ -8,9 +12,22 @@ void set_physical_mem() {
     //Allocate physical memory using mmap or malloc; this is the total size of
     //your memory you are simulating
 
-    
+    //Allocate the PHYSICAL MEMORY, 1GB
+    pm = malloc(MEMSIZE);
+
+    //Create first inner page table
+    int ipt_size = (32-offset) % 2 == 0 ? 1 << ((32-offset) / 2) : 1 << (((32-offset) / 2) + 1); 
+    pte_t ipt1[ipt_size];
+
+
     //HINT: Also calculate the number of physical and virtual pages and allocate
     //virtual and physical bitmaps and initialize them
+    memcpy(pm, opt, sizeof(opt));
+    memcpy(pm + sizeof(opt), p_bitmap, (NUM_PHYS_PAGES/8)/PGSIZE);
+    memcpy(pm + sizeof(opt) + ((NUM_PHYS_PAGES/8)/PGSIZE), v_bitmap, (NUM_VIRT_PAGES/8)/PGSIZE);
+    memcpy(pm + sizeof(opt) + ((NUM_PHYS_PAGES/8)/PGSIZE) + ((NUM_VIRT_PAGES/8)/PGSIZE), ipt1, sizeof(ipt1));
+
+
 
 }
 
@@ -76,7 +93,7 @@ print_TLB_missrate()
 The function takes a virtual address and page directories starting address and
 performs translation to return the physical address
 */
-pte_t *translate(pde_t *pgdir, void *va) {
+void *translate(pde_t *pgdir, void *va) {
     /* Part 1 HINT: Get the Page directory index (1st level) Then get the
     * 2nd-level-page table index using the virtual address.  Using the page
     * directory index and page table index get the physical address.
@@ -130,7 +147,14 @@ void *n_malloc(unsigned int num_bytes) {
 
     /* 
      * HINT: If the physical memory is not yet initialized, then allocate and initialize.
+
+       set_physical_mem(MEMSIZE);
+
      */
+
+
+
+    
 
    /* 
     * HINT: If the page directory is not initialized, then initialize the
