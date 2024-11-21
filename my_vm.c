@@ -30,7 +30,26 @@ unsigned int get_top_bits(unsigned int value,  int num_bits, int bitmap_size)
 }
 
 void insert_ipt() {
-    unsigned char* ptr = P_BITMAP;
+
+    static int num_ipts = 0;
+
+    for (int i = 0; i < NUM_PHYS_BYTES_NEEDED; i++) {
+        
+        unsigned char bastard = P_BITMAP[i];
+        bastard ^= 255;
+        
+        int result = 0;
+        while(bastard >>= 1) result++;
+        
+        if (result) {
+            set_bit(P_BITMAP, (i*8) + result);
+            pde_t address = ((i*8)+(7-result)*PGSIZE);
+            OPT[num_ipts] = address;
+            num_ipts++;
+            break;
+        }
+    
+    }
     
 }
 
@@ -44,16 +63,23 @@ void set_physical_mem() {
 
     //Allocate the PHYSICAL MEMORY, 1GB
     pm = malloc(MEMSIZE);
-
-
-
-
+    
     //HINT: Also calculate the number of physical and virtual pages and allocate
     //virtual and physical bitmaps and initialize them
+    for (int i = 0; i < NUM_PHYS_BYTES_NEEDED; i++) {
+        P_BITMAP[i] &= 0x0;
+    }
 
+    for (int i = 0; i < NUM_VIRT_BYTES_NEEDED; i++) {
+        V_BITMAP[i] &= 0x0;
+    }
 
+    for (int i = 0; i < (START/8); i++) {
+        P_BITMAP[i] ^= 255;
+    }
     
-
+    insert_ipt();
+    
 }
 
 void free_the_ting() {
@@ -156,11 +182,11 @@ void *get_next_avail(int num_pages) {
     int curr_index_cont = -1; //holds the virtual page entry address
 
     //Use virtual address bitmap to find the next free page
-    for(int i = 0; i < NUM_VIRT_PAGES/8; i++){
-        if(v_bitmap[i] != 255){ //if there exists a 0 in this bitmap index
+    for(int i = 0; i < NUM_VIRT_BITS_NEEDED/8; i++){
+        if(V_BITMAP[i] != 255){ //if there exists a 0 in this bitmap index
 
             for(int j = 0; j < 8; j++){ //get each bit and count if num_pages fit here
-                if(get_bit(&v_bitmap, (i*8) + j) == 0){ //if free spot found
+                if(get_bit(V_BITMAP, (i*8) + j) == 0){ //if free spot found
                     if(curr_index_cont == -1){ //if start of contiguous, assign index variable to address of the start
                         //assign curr_index_cont to the virtual page entry address
                         curr_cont++;

@@ -34,10 +34,15 @@ typedef unsigned long pde_t;
 //Physical memory
 extern void* pm;
 
-#define OPT pm
-#define P_BITMAP (unsigned char *)pm + PGSIZE
-#define V_BITMAP (unsigned char *)pm + PGSIZE + (NUM_PHYS_BITMAP_PAGES * PGSIZE)
+#define OPT ((pde_t*)pm)
+#define P_BITMAP ((unsigned char *)pm + PGSIZE)
+#define V_BITMAP ((unsigned char *)pm + PGSIZE + (NUM_PHYS_BITMAP_PAGES * PGSIZE))
 #define START PGSIZE + (NUM_PHYS_BITMAP_PAGES * PGSIZE) + (NUM_VIRT_BITMAP_PAGES * PGSIZE)
+
+#define TOTAL_OPT_ENTRIES 1 << (32-offset)/2
+#define TOTAL_IPT_ENTRIES ((32-offset) % 2 == 0) ? 1 << ((32-offset)/2) : 1 << ((32-offset)/2 + 1) 
+
+
 
 //Structure to represents TLB
 struct tlb {
