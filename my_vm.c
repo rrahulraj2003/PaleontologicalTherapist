@@ -147,7 +147,7 @@ void print_TLB_missrate() {
 The function takes a virtual address and page directories starting address and
 performs translation to return the physical address
 */
-void *translate(pde_t *pgdir, void *va) {
+void *translate(pde_t *pgdir, void *va) { //only called when the va is valid. To check if the va is valid, call map_page
     /* Part 1 HINT: Get the Page directory index (1st level) Then get the
     * 2nd-level-page table index using the virtual address.  Using the page
     * directory index and page table index get the physical address.
@@ -155,6 +155,12 @@ void *translate(pde_t *pgdir, void *va) {
     * Part 2 HINT: Check the TLB before performing the translation. If
     * translation exists, then you can return physical address from the TLB.
     */
+
+   if (map_page(pgdir, va, ___)) {
+    return phys_add
+   }
+
+   // mutex lock set_phys_memory()
 
 
     //If translation not successful, then return NULL
@@ -173,6 +179,18 @@ int map_page(pde_t *pgdir, void *va, void *pa) {
     /*HINT: Similar to translate(), find the page directory (1st level)
     and page table (2nd-level) indices. If no mapping exists, set the
     virtual to physical mapping */
+
+    /*
+    1. check if va is valid
+    - check if it is in opt
+        - no: then go to map the page
+        - yes: check if it is in ipt:
+            - no: then go to map the page
+            - yes: return 1
+    2. map the page:
+    - 
+    
+    */
 
     return -1;
 }
@@ -239,7 +257,17 @@ void *n_malloc(unsigned int num_bytes) {
 
      */
 
+    /*
+    
 
+    needs to call get_next_avail to know where to allocate the pages. First need to calculate # of pages.
+
+    1. Find an open page(s) in V_BITMAP and "set those bits" --> get their REAL addys (get_next_avail)
+    2. Find open physical pages to map the virtual pages --> get their REAL addys
+    3. For each virtual addy given by get_nextavail:
+        - map_page(pm, real_virt_add, real_phys_add) // going to fail --> returns 0 and maps the virt addys to the phys addys
+
+    */
 
     
 
@@ -278,6 +306,8 @@ int put_data(void *va, void *val, int size) {
      * than one page. Therefore, you may have to find multiple pages using translate()
      * function.
      */
+
+    // call translate, but before calling translate set up a separate helper to check if va is valid --> check if va is in the tlb first.
 
 
     /*return -1 if put_data failed and 0 if put is successfull*/
