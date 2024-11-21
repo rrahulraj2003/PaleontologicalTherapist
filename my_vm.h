@@ -35,8 +35,8 @@ typedef unsigned long pde_t;
 extern void* pm;
 
 #define OPT pm
-#define P_BITMAP (unsigned char *)pm + PGSIZE
-#define V_BITMAP (unsigned char *)pm + PGSIZE + (NUM_PHYS_BITMAP_PAGES * PGSIZE)
+#define P_BITMAP ((unsigned char *)pm + PGSIZE)
+#define V_BITMAP ((unsigned char *)pm + PGSIZE + (NUM_PHYS_BITMAP_PAGES * PGSIZE))
 #define START PGSIZE + (NUM_PHYS_BITMAP_PAGES * PGSIZE) + (NUM_VIRT_BITMAP_PAGES * PGSIZE)
 
 //Structure to represents TLB
@@ -45,9 +45,12 @@ struct tlb {
     * Think about the size of each TLB entry that performs virtual to physical
     * address translation.
     */
-
+   pde_t va[TLB_ENTRIES];
+   pte_t pa[TLB_ENTRIES];
 };
 extern struct tlb tlb_store;
+
+unsigned long tlb_counter = 0;
 
 // Setup functions
 void set_physical_mem();

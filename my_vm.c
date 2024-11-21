@@ -13,7 +13,6 @@ void set_bit(char *bitmap, int index) {
     bitmap[index / 8] = manip;
 }
 
-
 int get_bit(char *bitmap, int index) {
     unsigned int manip = bitmap[index / 8];
     manip = manip >> (index % 8);
@@ -68,9 +67,14 @@ void free_the_ting() {
  * Note: Make sure this is thread safe by locking around critical 
  *       data structures touched when interacting with the TLB
  */
-int TLB_add(void *va, void *pa) {
+int TLB_add(void *va, void *pa) { //Finished
 
-    /*Part 2 HINT: Add a virtual to physical page translation to the TLB */
+    tlb_store.va[tlb_counter] = va;
+    tlb_store.pa[tlb_counter] = pa;
+
+    tlb_counter++;
+
+    if(tlb_counter == TLB_ENTRIES) tlb_counter = 0;
 
     return -1;
 }
@@ -88,10 +92,10 @@ pte_t * TLB_check(void *va) {
 
     /* Part 2: TLB lookup code here */
 
-
-
-   /*This function should return a pte_t pointer*/
-
+    for(int i = 0; i < TLB_ENTRIES; i++)
+        if(tlb_store.va[i] == va) 
+            return tlb_store.va[i]; /*This function should return a pte_t pointer*/
+   
    return NULL;
 }
 
@@ -156,11 +160,11 @@ void *get_next_avail(int num_pages) {
     int curr_index_cont = -1; //holds the virtual page entry address
 
     //Use virtual address bitmap to find the next free page
-    for(int i = 0; i < NUM_VIRT_PAGES/8; i++){
-        if(v_bitmap[i] != 255){ //if there exists a 0 in this bitmap index
+    for(int i = 0; i < NUM_VIRT_BYTES_NEEDED/8; i++){
+        if(V_BITMAP[i] != 255){ //if there exists a 0 in this bitmap index
 
             for(int j = 0; j < 8; j++){ //get each bit and count if num_pages fit here
-                if(get_bit(&v_bitmap, (i*8) + j) == 0){ //if free spot found
+                if(get_bit(V_BITMAP, (i*8) + j) == 0){ //if free spot found
                     if(curr_index_cont == -1){ //if start of contiguous, assign index variable to address of the start
                         //assign curr_index_cont to the virtual page entry address
                         curr_cont++;
