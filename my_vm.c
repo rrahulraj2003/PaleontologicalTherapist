@@ -120,7 +120,7 @@ pte_t * TLB_check(void *va) {
 
     for(int i = 0; i < TLB_ENTRIES; i++)
         if(tlb_store.va[i] == va) 
-            return tlb_store.va[i]; /*This function should return a pte_t pointer*/
+            return tlb_store.pa[i]; /*This function should return a pte_t pointer*/
    
    return NULL;
 }
@@ -218,6 +218,7 @@ void *get_next_avail(int num_pages) {
 
                     //If successfully found contiguous entries, return start of contiguous
                     if(num_pages == curr_cont){
+                        set_bit(V_BITMAP, (i*8) + j);
                         return curr_index_cont;
                     }
                     
