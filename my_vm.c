@@ -29,7 +29,26 @@ unsigned int get_top_bits(unsigned int value,  int num_bits, int bitmap_size)
 }
 
 void insert_ipt() {
-    unsigned char* ptr = P_BITMAP;
+
+    static int num_ipts = 0;
+
+    for (int i = 0; i < NUM_PHYS_BYTES_NEEDED; i++) {
+        
+        unsigned char bastard = P_BITMAP[i];
+        bastard ^= 255;
+        
+        int result = 0;
+        while(bastard >>= 1) result++;
+        
+        if (result) {
+            set_bit(P_BITMAP, (i*8) + result);
+            pde_t address = ((i*8)+(7-result)*PGSIZE);
+            OPT[num_ipts] = address;
+            num_ipts++;
+            break;
+        }
+    
+    }
     
 }
 
@@ -43,16 +62,23 @@ void set_physical_mem() {
 
     //Allocate the PHYSICAL MEMORY, 1GB
     pm = malloc(MEMSIZE);
-
-
-
-
+    
     //HINT: Also calculate the number of physical and virtual pages and allocate
     //virtual and physical bitmaps and initialize them
+    for (int i = 0; i < NUM_PHYS_BYTES_NEEDED; i++) {
+        P_BITMAP[i] &= 0x0;
+    }
 
+    for (int i = 0; i < NUM_VIRT_BYTES_NEEDED; i++) {
+        V_BITMAP[i] &= 0x0;
+    }
 
+    for (int i = 0; i < (START/8); i++) {
+        P_BITMAP[i] ^= 255;
+    }
     
-
+    insert_ipt();
+    
 }
 
 void free_the_ting() {
