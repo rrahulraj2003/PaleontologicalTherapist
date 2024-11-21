@@ -1,5 +1,10 @@
 #include "my_vm.h"
+#include <string.h>
 #include <stdio.h>
+
+
+void* pm;
+struct tlb tlb_store;
 
 void set_bit(char *bitmap, int index) {
     unsigned int manip = bitmap[index / 8]; //useless line cause empty but keep it anyway
@@ -24,6 +29,11 @@ unsigned int get_top_bits(unsigned int value,  int num_bits, int bitmap_size)
     return gimme >> 8 * bitmap_size - num_bits; //moving bits to get top bit
 }
 
+void insert_ipt() {
+    unsigned char* ptr = P_BITMAP;
+    
+}
+
 /*
 Function responsible for allocating and setting your physical memory 
 */
@@ -35,20 +45,19 @@ void set_physical_mem() {
     //Allocate the PHYSICAL MEMORY, 1GB
     pm = malloc(MEMSIZE);
 
-    //Create first inner page table
-    int ipt_size = (32-offset) % 2 == 0 ? 1 << ((32-offset) / 2) : 1 << (((32-offset) / 2) + 1); 
-    pte_t ipt1[ipt_size];
+
 
 
     //HINT: Also calculate the number of physical and virtual pages and allocate
     //virtual and physical bitmaps and initialize them
-    memcpy(pm, opt, sizeof(opt));
-    memcpy(pm + sizeof(opt), p_bitmap, (NUM_PHYS_PAGES/8)/PGSIZE);
-    memcpy(pm + sizeof(opt) + ((NUM_PHYS_PAGES/8)/PGSIZE), v_bitmap, (NUM_VIRT_PAGES/8)/PGSIZE);
-    memcpy(pm + sizeof(opt) + ((NUM_PHYS_PAGES/8)/PGSIZE) + ((NUM_VIRT_PAGES/8)/PGSIZE), ipt1, sizeof(ipt1));
 
 
+    
 
+}
+
+void free_the_ting() {
+    free(pm);
 }
 
 
