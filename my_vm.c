@@ -1,25 +1,36 @@
 #include "my_vm.h"
 #include <string.h>
 #include <stdio.h>
+#include <pthread.h>
 
 
 void* pm;
 struct tlb tlb_store;
+long misses;
+long num_checks;
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
-void set_bit(char *bitmap, int index) {
-    unsigned int manip = bitmap[index / 8]; //useless line cause empty but keep it anyway
-    unsigned int bit = 1 << index % 8;
+void set_bit(char *bitmap, int index) { // sets a bit to 1
+    unsigned int manip = bitmap[index / 8];
+    unsigned int bit = 1 << (7 - (index % 8));
     manip = manip | bit;
     bitmap[index / 8] = manip;
 }
 
-int get_bit(char *bitmap, int index) {
+void clear_bit(char *bitmap, int index) { // clears a bit to 0
     unsigned int manip = bitmap[index / 8];
-    manip = manip >> (index % 8);
+    unsigned int bit = 1 << (7 - (index % 8));
+    manip = manip & ~bit;
+    bitmap[index / 8] = manip;
+}
+
+int get_bit(char *bitmap, int index) { //
+    unsigned int manip = bitmap[index / 8];
+    manip = manip >> (7 - (index % 8));
     return manip % 2;
 }
 
-unsigned int get_top_bits(unsigned int value,  int num_bits, int bitmap_size)
+unsigned int get_top_bits(unsigned int value,  int num_bits, int bitmap_size) // gets the top bits specified
 {
     unsigned int cross = ((int) (2 << num_bits) - 1) << (8 * bitmap_size - num_bits);
     
@@ -32,10 +43,10 @@ void insert_ipt() {
 
     static int num_ipts = 0;
 
-    for (int i = 0; i < NUM_PHYS_BYTES_NEEDED; i++) {
+    for (int i = (START/PGSIZE); i < NUM_PHYS_BYTES_NEEDED; i++) { //starting at START/PGSIZE because everything before hand is already taken by OPT, P_BITMAP, and V_BITMAP
         
         unsigned char bastard = P_BITMAP[i];
-        bastard ^= 255;
+        bastard ^= (1 << 8) - 1; // AKA 255
         
         int result = 0;
         while(bastard >>= 1) result++;
@@ -65,24 +76,45 @@ void set_physical_mem() {
     
     //HINT: Also calculate the number of physical and virtual pages and allocate
     //virtual and physical bitmaps and initialize them
-    for (int i = 0; i < NUM_PHYS_BYTES_NEEDED; i++) {
+    for (int i = 0; i < NUM_PHYS_BYTES_NEEDED; i++) { // initialize physical bitmap
         P_BITMAP[i] &= 0x0;
     }
 
-    for (int i = 0; i < NUM_VIRT_BYTES_NEEDED; i++) {
+    for (int i = 0; i < NUM_VIRT_BYTES_NEEDED; i++) { // initialize virtual bitmap
         V_BITMAP[i] &= 0x0;
     }
 
-    for (int i = 0; i < (START/8); i++) {
-        P_BITMAP[i] ^= 255;
+    for (int i = 0; i < (START/PGSIZE); i++) { // START = the physical address byte where its fair game for any typa storage. Traveling the bit map by bytes. Suppose START = 40KB, in the bitmap, u want 41 bits
+        P_BITMAP[i] ^= ((1 << 8) - 1); // AKA 255
     }
     
     insert_ipt();
     
 }
 
-void free_the_ting() {
-    free(pm);
+int walk_page_directory(void* va) { // just checking if the mapping exists so no need for offset I think
+    
+    pde_t virtual_address = *(pde_t*)va;
+    unsigned int top_bits = virtual_address >> (MID_BITS + offset);
+    unsigned int mid_bits = (virtual_address >> (offset)) & ((1 << MID_BITS)-1);
+    unsigned int offset_bits = virtual_address & ((1 << offset) - 1);
+    
+    pte_t *ipt_of_interest = (pte_t*)(pm + OPT[top_bits]);
+
+    if (ipt_of_interest) { 
+        
+        pte_t *phys_addy = pm + ipt_of_interest[mid_bits] + offset_bits;
+        
+        
+        if (phys_addy) {
+
+            return 1; 
+        }
+
+    }
+
+    return 0;
+
 }
 
 
@@ -95,8 +127,10 @@ void free_the_ting() {
  */
 int TLB_add(void *va, void *pa) { //Finished
 
-    tlb_store.va[tlb_counter] = va;
-    tlb_store.pa[tlb_counter] = pa;
+    static unsigned long tlb_counter = 0;
+
+    tlb_store.va[tlb_counter] = *(pde_t*) va;
+    tlb_store.pa[tlb_counter] = *(pte_t*)pa;
 
     tlb_counter++;
 
@@ -116,12 +150,16 @@ int TLB_add(void *va, void *pa) { //Finished
  */
 pte_t * TLB_check(void *va) {
 
+    num_checks++;
+
     /* Part 2: TLB lookup code here */
 
     for(int i = 0; i < TLB_ENTRIES; i++)
-        if(tlb_store.va[i] == va) 
-            return tlb_store.pa[i]; /*This function should return a pte_t pointer*/
+        if(tlb_store.va[i] == *(pte_t*)va) 
+            return &(tlb_store.pa[i]); /*This function should return a pte_t pointer*/
    
+    misses++;
+
    return NULL;
 }
 
@@ -131,12 +169,8 @@ pte_t * TLB_check(void *va) {
  * Feel free to extend the function arguments or return type.
  */
 void print_TLB_missrate() {
-    double miss_rate = 0;	
 
-    /*Part 2 Code here to calculate and print the TLB miss rate*/
-
-
-
+    double miss_rate = (double) misses/num_checks;
 
     fprintf(stderr, "TLB miss rate %lf \n", miss_rate);
 }
@@ -147,7 +181,7 @@ void print_TLB_missrate() {
 The function takes a virtual address and page directories starting address and
 performs translation to return the physical address
 */
-void *translate(pde_t *pgdir, void *va) { //only called when the va is valid. To check if the va is valid, call map_page
+void *translate(pde_t *pgdir, void *va) { //only called when the va is valid. To check if the va is valid, call walk_page_directory
     /* Part 1 HINT: Get the Page directory index (1st level) Then get the
     * 2nd-level-page table index using the virtual address.  Using the page
     * directory index and page table index get the physical address.
@@ -156,15 +190,21 @@ void *translate(pde_t *pgdir, void *va) { //only called when the va is valid. To
     * translation exists, then you can return physical address from the TLB.
     */
 
-   if (map_page(pgdir, va, ___)) {
-    return phys_add
-   }
+    unsigned long virtual_addy = *(unsigned long*) va;
+    unsigned int top_bits = virtual_addy >> (32-TOP_BITS);
+    unsigned int middle_bits = (virtual_addy >> offset) & ((1 << MID_BITS) - 1);
+    unsigned int offset_bits = virtual_addy & ((1 << offset) - 1);
 
-   // mutex lock set_phys_memory()
+    if (TLB_check(va - offset_bits)) {
+        return TLB_check(va - offset_bits) + offset_bits;
+    }
 
+    pte_t* ipt = (pte_t*)(pm + pgdir[top_bits]); //physical memory pointer to ipt
+    pte_t base_physical_addy = ipt[middle_bits];
+    pte_t final_physical_addy = base_physical_addy + offset_bits;
 
     //If translation not successful, then return NULL
-    return NULL; 
+    return pm + final_physical_addy; 
 }
 
 
@@ -174,23 +214,26 @@ as an argument, and sets a page table entry. This function will walk the page
 directory to see if there is an existing mapping for a virtual address. If the
 virtual address is not present, then a new entry will be added
 */
-int map_page(pde_t *pgdir, void *va, void *pa) {
+int map_page(pde_t *pgdir, void *va, void *pa) { //pgdir needs to contain the physical addresses of the ipts
 
     /*HINT: Similar to translate(), find the page directory (1st level)
     and page table (2nd-level) indices. If no mapping exists, set the
     virtual to physical mapping */
 
-    /*
-    1. check if va is valid
-    - check if it is in opt
-        - no: then go to map the page
-        - yes: check if it is in ipt:
-            - no: then go to map the page
-            - yes: return 1
-    2. map the page:
-    - 
+    int ipt_num = (*(pte_t*)va)/((1 << MID_BITS)* PGSIZE);
     
-    */
+    if (pgdir[ipt_num] == 0) {
+        insert_ipt();
+    }
+
+    pte_t* ipt = (pte_t*)(pm + pgdir[ipt_num]);
+    int ipt_index = ((*(pte_t*)va) % ((1 << MID_BITS) * PGSIZE))/PGSIZE;
+    ipt[ipt_index] = *(pte_t*)pa;
+
+    printf("%d\n", ipt_index);
+
+    misses++; // compulsory misses
+    TLB_add(va, pa);
 
     return -1;
 }
@@ -198,28 +241,32 @@ int map_page(pde_t *pgdir, void *va, void *pa) {
 
 /*Function that gets the next available page
 */
-void *get_next_avail(int num_pages) {
+pte_t get_next_avail(int num_pages) {
 
     int curr_cont = 0;
     int curr_index_cont = -1; //holds the virtual page entry address
+    int index = 0;
+
+    unsigned char* v = V_BITMAP;
 
     //Use virtual address bitmap to find the next free page
     for(int i = 0; i < NUM_VIRT_BYTES_NEEDED/8; i++){
         if(V_BITMAP[i] != 255){ //if there exists a 0 in this bitmap index
-
             for(int j = 0; j < 8; j++){ //get each bit and count if num_pages fit here
                 if(get_bit(V_BITMAP, (i*8) + j) == 0){ //if free spot found
                     if(curr_index_cont == -1){ //if start of contiguous, assign index variable to address of the start
                         //assign curr_index_cont to the virtual page entry address
-                        curr_cont++;
+                        index = (i*8) + j;
+                        curr_index_cont++;
                     }else if(curr_index_cont != -1){ //if contiguous, curr_cont++
                         curr_cont++;
                     }
 
                     //If successfully found contiguous entries, return start of contiguous
                     if(num_pages == curr_cont){
-                        set_bit(V_BITMAP, (i*8) + j);
-                        return curr_index_cont;
+                        // set_bit(V_BITMAP, (i*8) + j);
+                        pte_t virtual_address= index*PGSIZE;
+                        return virtual_address;
                     }
                     
                 }else{ //if occupied spot found, if index == 1 basically
@@ -236,9 +283,8 @@ void *get_next_avail(int num_pages) {
             curr_index_cont = -1;
 
         }
-    }
-
-    return NULL;
+    }    //set_physical_mem();
+    return -1;
 }
 
 
@@ -249,7 +295,7 @@ void *get_next_avail(int num_pages) {
  *       this function at the same time should NOT get the same
  *       or overlapping allocations
 */
-void *n_malloc(unsigned int num_bytes) {
+void *n_malloc(unsigned int num_bytes) { // need to fix set_bit here!!
 
     /* 
      * HINT: If the physical memory is not yet initialized, then allocate and initialize.
@@ -257,6 +303,20 @@ void *n_malloc(unsigned int num_bytes) {
        set_physical_mem(MEMSIZE);
 
      */
+
+
+    pthread_mutex_lock(&mutex);
+    static int dingus = 1;
+
+    if (dingus) {
+        set_physical_mem();
+        dingus--;
+    }
+    pthread_mutex_unlock(&mutex);
+
+    
+
+    
 
     /*
     
@@ -270,7 +330,41 @@ void *n_malloc(unsigned int num_bytes) {
 
     */
 
-    
+    int num_pages = (num_bytes % PGSIZE == 0) ? (num_bytes/PGSIZE) : (num_bytes/PGSIZE) + 1;
+    pte_t initial_va = get_next_avail(num_pages);
+    if (initial_va == -1) {
+        printf("Error. No more available pages. Need to free!\n");
+        return NULL;
+    }
+
+    for (int n = 0; n < num_pages; n++) {
+        
+        pte_t va = initial_va + (n * PGSIZE);
+
+        int page = 0;
+        pte_t* pa;
+
+        for (int i = (START/PGSIZE); i < NUM_PHYS_BYTES_NEEDED; i++) { //starting at START/PGSIZE because everything before hand is already taken by OPT, P_BITMAP, and V_BITMAP
+            
+            unsigned char bastard = P_BITMAP[i];
+            bastard ^= (1 << 8) - 1; // AKA 255
+            
+            int result = 0;
+            while(bastard >>= 1) result++;
+            
+            if (result) {
+                set_bit(P_BITMAP, (i*8) + (7-result));
+                pde_t address = ((i*8)+(7-result)*PGSIZE);
+                pa = &address;
+                break;
+            }
+
+        }
+        
+        set_bit(V_BITMAP, (va/PGSIZE));
+        map_page(OPT, &va, pa);
+
+    }
 
    /* 
     * HINT: If the page directory is not initialized, then initialize the
@@ -278,13 +372,11 @@ void *n_malloc(unsigned int num_bytes) {
     * free pages are available, set the bitmaps and map a new page. Note, you will 
     * have to mark which physical pages are used. 
     */
+    pte_t* ret_addy = (pte_t*) malloc(sizeof(pte_t));
+    *ret_addy = initial_va;
 
-    return NULL;
-}
+    return ret_addy;
 
-/* Responsible for releasing one or more memory pages using virtual address (va)
-*/
-void n_free(void *va, int size) {
 
     /* Part 1: Free the page table entries starting from this virtual address
      * (va). Also mark the pages free in the bitmap. Perform free only if the 
@@ -292,6 +384,80 @@ void n_free(void *va, int size) {
      *
      * Part 2: Also, remove the translation from the TLB
      */
+    
+}
+
+/* Responsible for releasing one or more memory pages using virtual address (va)
+*/
+void n_free(void *va, int size) { 
+    /* Part 1: Free the page table entries starting from this virtual address
+     * (va). Also mark the pages free in the bitmap. Perform free only if the 
+     * memory from "va" to va+size is valid.
+     *
+     * Part 2: Also, remove the translation from the TLB
+     */
+    pte_t virt_addy = *(pte_t*) va;
+
+    if (virt_addy + size >= MAX_MEMSIZE) {
+        printf("Error. Virtual address and size exceeds virtual memory limit.\n");
+        return;
+    }
+
+    if (virt_addy % PGSIZE != 0) {
+        printf("Error. Unable to free.\n");
+        return;
+    }
+
+    //i forgor. What if n_free(4097) for n_malloc(4096)???
+    if (walk_page_directory(va)) { // for safe measure. If user passes in address which is already free, then ull be freeing null.
+
+        int num_pages = (size % PGSIZE == 0) ? (size/PGSIZE) : (size/PGSIZE) + 1;
+
+        for (int i = 0; i < num_pages; i++) {
+            
+            pde_t virtual_address = *(pde_t*)va + (i * PGSIZE);
+
+            if (!get_bit(V_BITMAP, virtual_address / PGSIZE)) {
+                printf("Error. Pages are non-contigous.😣\n");
+                return;
+            }
+            
+        }
+
+        for (int i = 0; i < num_pages; i++) {
+
+            // address preperation
+            pde_t virtual_address = *(pde_t*)va + (i * PGSIZE);
+            unsigned int top_bits = virtual_address >> (MID_BITS + offset);
+            unsigned int mid_bits = (virtual_address >> (offset)) & ((1 << MID_BITS)-1);
+            unsigned int offset_bits = virtual_address & ((1 << offset) - 1);
+            
+            // freeing physical memory and physical bitmap
+            pte_t *ipt_of_interest = (pte_t*)(pm + OPT[top_bits]);
+            pte_t* phys_addy = (pte_t*)(pm + ipt_of_interest[mid_bits] + offset_bits);
+            void* phys_free_space = malloc(PGSIZE);
+            
+            memcpy(phys_addy, phys_free_space, PGSIZE);
+            
+            pte_t phys_addy_num = ipt_of_interest[mid_bits] + offset_bits;
+            int index = (phys_addy_num - START) / PGSIZE;
+            clear_bit(P_BITMAP, index);
+
+            // freeing virtual address space and virtual bitmap
+            ipt_of_interest[mid_bits] = 0;
+            clear_bit(V_BITMAP, virtual_address / PGSIZE);
+
+        }
+        
+    } else {
+        printf("Error. Virtual address and size exceeds virtual memory limit.\n");
+        return;
+    }
+
+    int num_pages = (size % PGSIZE == 0) ? (size/PGSIZE) : (size/PGSIZE) + 1;
+
+
+
     
 }
 
@@ -307,13 +473,48 @@ int put_data(void *va, void *val, int size) {
      * than one page. Therefore, you may have to find multiple pages using translate()
      * function.
      */
-
+ 
     // call translate, but before calling translate set up a separate helper to check if va is valid --> check if va is in the tlb first.
 
+    pte_t addy = (pte_t) va;
+
+    if (addy + size >= MAX_MEMSIZE) {
+        printf("Error. Virtual address and size exceeds virtual memory limit. \n");
+        return -1;
+    }
+
+    int num_pages = (size % PGSIZE == 0) ? (size/PGSIZE) : (size/PGSIZE) + 1;
+    for (int i = 0; i < num_pages; i++) {
+        
+        pde_t virtual_address = (pde_t)va + (i * PGSIZE); // need to remove offset
+        pde_t virt_offset = virtual_address & ((1 >> offset) - 1);
+        pde_t changed_virtual_address = virtual_address - (virt_offset);
+
+        if (get_bit(V_BITMAP, (changed_virtual_address / PGSIZE)) == 0) {
+            printf("Error. Pages are non-contigous. 😣\n");
+            return -1;
+        }
+        
+    }
+
+    pte_t* address = TLB_check(va);
+    if (address == NULL) {
+        if (walk_page_directory(va) == 0) {
+            return -1;
+        } else {
+            address = translate(OPT, va);
+        }
+    }
+
+    int* value = (int*) val;
+
+    memcpy(address, val, size);
+    
+    return 0;
 
     /*return -1 if put_data failed and 0 if put is successfull*/
 
-    return -1;
+
 }
 
 
@@ -323,6 +524,40 @@ void get_data(void *va, void *val, int size) {
     /* HINT: put the values pointed to by "va" inside the physical memory at given
     * "val" address. Assume you can access "val" directly by derefencing them.
     */
+
+    pte_t addy = (pte_t) va;
+
+    if (addy + size >= MAX_MEMSIZE) {
+        printf("Error. Virtual address and size exceeds virtual memory limit.\n");
+        return;
+    }
+
+    int num_pages = (size % PGSIZE == 0) ? (size/PGSIZE) : (size/PGSIZE) + 1;
+
+    for (int i = 0; i < num_pages; i++) {
+        
+        pde_t virtual_address = (pde_t)va + (i * PGSIZE); // need to remove offset
+        pde_t virt_offset = virtual_address & ((1 >> offset) - 1);
+        pde_t changed_virtual_address = virtual_address - (virt_offset);
+
+        if (get_bit(V_BITMAP, (changed_virtual_address / PGSIZE)) == 0) {
+            printf("Error.\n");
+            return;
+        }
+        
+    }
+
+    pte_t* address = TLB_check(va);
+
+    if (address == NULL) {
+        if (walk_page_directory(va) == 0) {
+            return;
+        } else {
+            address = translate(OPT, va);
+        }
+    }
+    
+    memcpy(val, address, size);
 
 }
 
@@ -341,8 +576,12 @@ void mat_mult(void *mat1, void *mat2, int size, void *answer) {
      * getting the values from two matrices, you will perform multiplication and 
      * store the result to the "answer array"
      */
+
     int x, y, val_size = sizeof(int);
     int i, j, k;
+
+    printf("%ld\n",(pte_t)mat1);
+
     for (i = 0; i < size; i++) {
         for(j = 0; j < size; j++) {
             unsigned int a, b, c = 0;
@@ -356,8 +595,9 @@ void mat_mult(void *mat1, void *mat2, int size, void *answer) {
                 c += (a * b);
             }
             int address_c = (unsigned int)answer + ((i * size * sizeof(int))) + (j * sizeof(int));
-            // printf("This is the c: %d, address: %x!\n", c, address_c);
+            //printf("This is the c: %d, address: %x!\n", c, address_c);
             put_data((void *)address_c, (void *)&c, sizeof(int));
+  
         }
     }
 }

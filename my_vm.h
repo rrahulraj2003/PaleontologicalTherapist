@@ -17,10 +17,26 @@
 #define NUM_PHYS_BITMAP_PAGES (NUM_PHYS_BYTES_NEEDED/PGSIZE) // # of pages in physical memory needed to store the physical bitmap
 
 //#define MAX_MEMSIZE 4ULL*1024*1024*1024
-#define MAX_MEMSIZE 2147483647 // Maximum size of virtual memory
+#define MAX_MEMSIZE 4ULL*1024*1024*1024 // Maximum size of virtual memory
 #define NUM_VIRT_BITS_NEEDED (MAX_MEMSIZE/PGSIZE) // # of virtual bits needed = # of pages in virtual address space
 #define NUM_VIRT_BYTES_NEEDED (NUM_VIRT_BITS_NEEDED/8) // # of bytes needed in physical memory to store the virtual bitmap
 #define NUM_VIRT_BITMAP_PAGES (NUM_VIRT_BYTES_NEEDED/PGSIZE) // # of pages in physical memory needed to store the virtual bitmap
+
+#define offset 12
+
+//Physical memory
+extern void* pm;
+
+#define OPT ((pde_t*)pm)
+#define P_BITMAP ((unsigned char *)pm + PGSIZE)
+#define V_BITMAP ((unsigned char *)pm + PGSIZE + (NUM_PHYS_BYTES_NEEDED))
+#define START (PGSIZE + (NUM_PHYS_BYTES_NEEDED) + (NUM_VIRT_BYTES_NEEDED))
+
+#define TOP_BITS (32-offset)/2
+#define MID_BITS ((32-offset) % 2 == 0) ? ((32-offset)/2) : ((32-offset)/2 + 1)
+
+#define TOTAL_OPT_ENTRIES (1 << TOP_BITS)
+#define TOTAL_IPT_ENTRIES (1 << MID_BITS)
 
 // Represents a page table entry
 typedef unsigned long pte_t;
@@ -29,19 +45,6 @@ typedef unsigned long pte_t;
 typedef unsigned long pde_t;
 
 #define TLB_ENTRIES 512
-#define offset 12
-
-//Physical memory
-extern void* pm;
-
-#define OPT ((pde_t*)pm)
-#define P_BITMAP ((unsigned char *)pm + PGSIZE)
-#define V_BITMAP ((unsigned char *)pm + PGSIZE + (NUM_PHYS_BITMAP_PAGES * PGSIZE))
-#define START PGSIZE + (NUM_PHYS_BITMAP_PAGES * PGSIZE) + (NUM_VIRT_BITMAP_PAGES * PGSIZE)
-
-#define TOTAL_OPT_ENTRIES 1 << (32-offset)/2
-#define TOTAL_IPT_ENTRIES ((32-offset) % 2 == 0) ? 1 << ((32-offset)/2) : 1 << ((32-offset)/2 + 1) 
-
 
 
 //Structure to represents TLB
@@ -55,11 +58,10 @@ struct tlb {
 };
 extern struct tlb tlb_store;
 
-unsigned long tlb_counter = 0;
+extern unsigned long tlb_counter;
 
 // Setup functions
 void set_physical_mem();
-void free_the_ting();
 
 // TLB Functions
 int TLB_add(void *va, void *pa);
